@@ -1,0 +1,55 @@
+version: '3.9'
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: product_metadata
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/product_metadata
+      APP_ENV: development
+      STORAGE_DIR: /app/storage
+      VECTOR_INDEX_PATH: /app/storage/vector.index
+      EMBEDDING_MODEL: sentence-transformers/all-MiniLM-L6-v2
+      REDIS_URL: redis://redis:6379/0
+      ENABLE_REDIS: "true"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./data:/app/storage
+    depends_on:
+      - db
+      - redis
+
+  frontend:
+    image: python:3.11-slim
+    working_dir: /app
+    command: bash -lc "pip install -r /app/../backend/requirements.txt && streamlit run streamlit_app.py --server.port 8501 --server.address 0.0.0.0"
+    volumes:
+      - ./frontend:/app
+      - ./backend:/backend
+      - ./data:/data
+    environment:
+      API_BASE_URL: http://backend:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
